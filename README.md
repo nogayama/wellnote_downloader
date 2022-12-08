@@ -105,7 +105,8 @@ TBD
 
 ## 開発者
 
-- [Takahide Nogayama](https://github.com/nogayama) <img src="https://avatars.githubusercontent.com/u/11750755?s=96&v=4" width="100"/>
+[Takahide Nogayama](https://github.com/nogayama)
+<img src="https://avatars.githubusercontent.com/u/11750755?s=96&v=4" width="100" />
 
 
 

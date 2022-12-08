@@ -10,7 +10,7 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
 
 
 
-[!['Wellnote Downloader アルバムから写真・動画をダウンロード']('https://user-images.githubusercontent.com/11750755/206522953-8049c942-9a88-4251-9da9-373f77f0ab18.png')]('https://youtu.be/o0UrRwXwCeI')
+[![Wellnote Downloader アルバムから写真・動画をダウンロード](https://user-images.githubusercontent.com/11750755/206524695-38bffc61-b4ac-4802-a810-13b8cc824e83.png)](https://youtu.be/o0UrRwXwCeI)
 
 ----
 

@@ -36,6 +36,36 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
 
 
 
+## 使い方
+
+
+
+### アルバム内の写真・動画のダウンロード
+
+
+
+1. 実行前にメールアドレスとパスワードを設定します。
+    ```sh
+    $ export WELLNOTE_EMAIL=あなたのEmailアドレス
+    $ export WELLNOTE_PASSWORD=あなたのパスワード
+    ```
+2. アルバム内の写真・動画をダウンロードします。2015年の1月から2016年の12月までダウンロードする場合は以下のように実行します。
+    ```sh
+    $ wellnote_downloader album --start 2015-01  --end 2016-12
+    ```
+
+3. 今いるフォルダ内に`download`というフォルダができているので、その中のファイルがダウンロードできているか確認します。
+
+
+
+### ホーム画面の日記のダウンロード
+
+
+
+TBD
+
+
+
 ## 開発者
 
 - **Takahide Nogayama** - [Nogayama](https://github.com/nogayama)

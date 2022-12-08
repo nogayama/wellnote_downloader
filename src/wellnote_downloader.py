@@ -10,11 +10,12 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
 from contextlib import contextmanager
+from getpass import getpass
 import glob
 import logging
 import os
@@ -99,27 +100,38 @@ def download_is_completed(download_dir, last_newest_file):
 # Utilities for Wellnote
 
 
-def download_album(start_year: int = 2009, start_month: int = 1, end_year: int = 2023, end_month: int = 12, download_dir: str = None, browser: str = "firefox") -> int:
+def download_album(start_year: int = 2009, start_month: int = 1, \
+                   end_year: int = 2023, end_month: int = 12,  \
+                   download_dir: str = None, browser: str = None) -> int:
 
     email: str = None
     password: str = None
+    no_environ_vars = False
     try:
         email = os.environ['WELLNOTE_EMAIL']
     except KeyError:
-        print("エラー: 'export WELLNOTE_EMAIL=あなたのEmailアドレス' をコマンドラインで実行して下さい")
-        return 1
+        # print("エラー: 'export WELLNOTE_EMAIL=あなたのEmailアドレス' をコマンドラインで実行して下さい")
+        # return 1
+        no_environ_vars = True
+        email = input("Enter your email: ")
+
     try:
         password = os.environ['WELLNOTE_PASSWORD']
     except KeyError:
-        print("エラー: 'export WELLNOTE_PASSWORD=あなたのパスワード' をコマンドラインで実行して下さい")
-        return 1
+        # print("エラー: 'export WELLNOTE_PASSWORD=あなたのパスワード' をコマンドラインで実行して下さい")
+        # return 1
+        no_environ_vars = True
+        password = getpass("Enter your password: ")
+    if no_environ_vars:
+        _LOGGER.warning("You can omit username and password prompt by declaring environmental variables WELLNOTE_EMAIL and WELLNOTE_PASSWORD.")
 
     # download_dir: str = "/Users/nogayama1/Downloads"
     if not download_dir:
         # download_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-        download_dir = os.path.join(os.getcwd(), "download")
+        download_dir = os.path.join(os.getcwd(), "Downloads")
 
-    browser: str = "firefox"  # "chrome"
+    if not browser:
+        browser = "firefox"
     timeout_sec: int = 60
 
     driver: WebDriver = None

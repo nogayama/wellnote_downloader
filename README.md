@@ -1,4 +1,4 @@
-# wellnote downloader
+# Wellnote Downloader
 
 
 
@@ -10,12 +10,22 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
 
 
 
+> 実行例の見方： この文書で例示する実行例では、実行するコマンドを、`$`の後ろに書きます。続く行で実行結果の例を示しています。例えばファイル`a.txt`と`b.txt`が存在するフォルダで`ls`コマンドを実行すると２つのファイル名が表示されますが、その実行例は次のように示します。
+>
+> ```
+> $ ls
+> a.txt b.txt
+
+
 
 ## セットアップ
+
+
 
 1. Firefox または Chrome をインストールする。
 2. Pythonをインストールする。
     コマンドラインから`python3`コマンドと`pip3`コマンドを実行できるか確認する
+    
     ```sh
     $ python3 --version
     Python 3.11.0
@@ -23,15 +33,26 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
     $ pip3 --version 
     pip 22.3 from pip (python 3.11)
     ```
-3. wellnote downloader をインストール
+3. Wellnote Downloader をインストール
     ```bash
-    pip3 install wellnote_downloader
+    $ pip3 install wellnote_downloader
+    長いので略
     ```
     
     コマンドラインから`wellnote_downloader`コマンドを実行できるか確認する。
     ```sh
-    $ wellnote_downloader --version
-    0.1.0
+    $ wellnote_downloader album --help
+    usage: wellnote_downloader [-h] {album} ...
+    
+    Wellnote Downloader
+    
+    positional arguments:
+      {album}     sub commands
+        album     download album
+    
+    options:
+      -h, --help  show this help message and exit
+    
     ```
 
 
@@ -44,17 +65,25 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
 
 
 
-1. 実行前にメールアドレスとパスワードを設定します。
-    ```sh
-    $ export WELLNOTE_EMAIL=あなたのEmailアドレス
-    $ export WELLNOTE_PASSWORD=あなたのパスワード
-    ```
-2. アルバム内の写真・動画をダウンロードします。2015年の1月から2016年の12月までダウンロードする場合は以下のように実行します。
+1. アルバム内の写真・動画をダウンロードします。2015年の1月から2016年の12月までダウンロードする場合は以下のように実行します。
     ```sh
     $ wellnote_downloader album --start 2015-01  --end 2016-12
     ```
 
-3. 今いるフォルダ内に`download`というフォルダができているので、その中のファイルがダウンロードできているか確認します。
+2. 今いるフォルダ内に`download`というフォルダができているので、その中のファイルがダウンロードできているか確認します。
+
+
+
+
+
+
+- Tips
+
+    1. 実行前にメールアドレスとパスワードを設定すると、入力を省略できます。
+        ```sh
+        $ export WELLNOTE_EMAIL=あなたのEmailアドレス
+        $ export WELLNOTE_PASSWORD=あなたのパスワード
+        ```
 
 
 

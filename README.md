@@ -63,6 +63,9 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
     options:
       -h, --help  show this help message and exit
     
+    # Command not found エラーが出る場合は、`wellnote_downloader` を `python -m wellnote_downloader` にすると動くかもしれません
+    $ python -m wellnote_downloader album --help
+    
     ```
 
 
@@ -80,6 +83,15 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
     $ wellnote_downloader album --start 2015-01  --end 2016-12
     ```
 
+    
+    
+    > Command not found エラーが出る場合は、`wellnote_downloader` を `python -m wellnote_downloader` にすると動くかもしれません
+    > ```sh
+    > $ python -m wellnote_downloader album --start 2015-01  --end 2016-12
+    > ```
+    
+    
+    
 2. 今いるフォルダ内に`download`というフォルダができているので、その中のファイルがダウンロードできているか確認します。
 
 

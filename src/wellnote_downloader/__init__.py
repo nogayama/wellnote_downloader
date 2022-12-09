@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -91,7 +91,7 @@ def get_driver_and_wait(download_dir: str = None, browser: str = None) -> tuple[
     return driver, wait, download_dir, timeout_sec
 
 def scroll_to_show_element(driver, element, offset=0):
-    _LOGGER.info("Scrolling window")
+    _LOGGER.debug("Scrolling window to locate the element in window")
     driver.execute_script("arguments[0].scrollIntoView();", element)
     if offset != 0:
         driver.execute_script("window.scrollTo(0, window.pageYOffset + " + str(offset) + ");")
@@ -233,6 +233,7 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
                    download_dir: str = None, browser: str = None) -> int:
     _LOGGER.info("Invoking download_home(start_year='%s', start_month='%s', end_year='%s', end_month='%s', download_dir='%s', browser='%s')")
+    # _LOGGER.setLevel(logging.DEBUG)
 
     email: str
     password: str
@@ -241,31 +242,74 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
     driver: WebDriver
     wait: WebDriverWait
     timeout_sec: int
-    driver, wait, timeout_sec = get_driver_and_wait(download_dir, browser)
 
-    with wellnote(driver, wait, email, password):
-        
-        if True: # already in home tab
+    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser)
+    try:
+        driver.maximize_window()
+        with wellnote(driver, wait, email, password):
 
-            data_indexes_done: set[int] = set()
-            home_element_parent: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-dMOJrz"]))
+            _LOGGER.info("Deleting your family element")
+            # <div class="sc-dkQkyq kcvKs"><div translate="no" class="sc-jivBlf fDaukR">あなたの家族</div></div>
+            your_family_elem = driver.find_element(By.CLASS_NAME, 'sc-dkQkyq')
+            driver.execute_script("var element = arguments[0]; element.parentNode.removeChild(element); ", your_family_elem)
+            time.sleep(INTERVAL)
+            
+            if True: # already in home tab
 
-            for i in range(10):
-                home_elements: WebElement = home_element_parent.find_elements(By.XPATH, "./div")
-                for home_element in home_elements:
-                    data_index: int = int(home_element.get_attribute("data-index"))
-                    if data_index not in data_indexes_done:
+                data_indexes_done: set[int] = set()
+                home_element_parent: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-dMOJrz"]))
+
+                sequence_check_count: int = 0
+                while True:
+                    
+                    home_elements: WebElement = home_element_parent.find_elements(By.XPATH, "./div")
+                    _LOGGER.debug("Found %s home elements in display.", len(home_elements))
+
+                    for home_element in home_elements:
                         scroll_to_show_element(driver, home_element)
+                        time.sleep(INTERVAL)
+                        data_index: int = int(home_element.get_attribute("data-index"))
+                        
+                        if data_index not in data_indexes_done:
 
-                        # <time class="sc-hKTqa fqnSS" datetime="2019-11-05T20:05:24+09:00">2019年11月5日</time>
-                        time_elem: WebElement = home_element_parent.find_elements(By.XPATH, ".//time")
-                        datetime_s:str = time_elem.get_attribute("datetime")
-                        datetime_s = datetime_s.split("+")[0] # remove +90:00
-                        _LOGGER.debug("Found home entry at %s", datetime_s)
+                            # <time class="sc-hKTqa fqnSS" datetime="2019-11-05T20:05:24+09:00">2019年11月5日</time>
+                            time_elem: WebElement = home_element.find_element(By.XPATH, ".//time")
+                            datetime_iso_s:str = time_elem.get_attribute("datetime")
+                            _LOGGER.info("Found data_index=%s, with datetime=%s", data_index, datetime_iso_s)
+                            datetime_iso_s = datetime_iso_s.split("+")[0] # remove +90:00
 
-                        # target_path :str = os.path.join(default_download_dir, str(data_index) + '.jpg')
-                        # home_element.screenshot(target_path)
-                        # data_indexes_done.add(data_index)
+                            datetime_s = datetime_iso_s.replace(":", "-")
+                            datetime_s = datetime_s.replace("T", "_")
+                            year_s = datetime_s.split("-")[0] #
+                            
+                            target_dir: str = os.path.join(download_dir, "wellnote", "home", year_s)
+                            target_path: str = os.path.join(target_dir, f"wellnote_home_{datetime_s}.png")
+                            
+                            if os.path.exists(target_path):
+                                _LOGGER.warning("Skipping    %s because it exists", target_path.replace(os.getcwd(), "."))
+                            else:
+                                _LOGGER.warning("Downloading %s because it exists", target_path.replace(os.getcwd(), "."))
+                                os.makedirs(os.path.join(target_dir), exist_ok=True)
+                                time.sleep(INTERVAL)
+                                home_element.screenshot(target_path)
+
+                            data_indexes_done.add(data_index)
+                            
+                            # elem_height: int = home_element.size['height']
+                            # _LOGGER.debug("Scrolling the captured element to see next element with its heights=%s", elem_height)
+                            # driver.execute_script(f"window.scrollBy(0, {elem_height});")
+                            # time.sleep(INTERVAL)
+                            sequence_check_count = 0
+                            break
+                    else:
+                        sequence_check_count += 1
+                        if sequence_check_count >= 4:
+                            _LOGGER.info("Found the end of the home element sequence")
+                            break
+
+    finally:
+        driver.quit()
+    
     return 0
 
 
@@ -294,149 +338,152 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
     driver: WebDriver
     wait: WebDriverWait
     timeout_sec: int
+
     driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser)
+    try:
+        with wellnote(driver, wait, email, password):
 
-    with wellnote(driver, wait, email, password):
+            with album_tab(driver, wait):
 
-        with album_tab(driver, wait):
+                ## Go to start year
+                year: int = 9999
+                while year >= 2009:  # We can't go back to the years before wellnote's inception
 
-            ## Go to start year
-            year: int = 9999
-            while year >= 2009:  # We can't go back to the years before wellnote's inception
+                    _LOGGER.debug("Waiting until a year text is available")
+                    # year = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[contains(text(), '年')]"])) # dont work
+                    year_elem: WebElement = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[@class='sc-bOtlzW fgPidp']"]))
+                    year = int(year_elem.text.replace("年", ""))
 
-                _LOGGER.debug("Waiting until a year text is available")
-                # year = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[contains(text(), '年')]"])) # dont work
-                year_elem: WebElement = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[@class='sc-bOtlzW fgPidp']"]))
-                year = int(year_elem.text.replace("年", ""))
+                    if year == start_year:
+                        break
 
-                if year == start_year:
-                    break
+                    move_previous_year_button = None
+                    with inspect_mode(driver, timeout_sec) as wait2:
+                        _LOGGER.debug("Waiting until a clickable next button is available")
+                        move_previous_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-jFkwbb ruuVe']"]))
+                    if not move_previous_year_button:
+                        _LOGGER.info("Breaking this year because previous button is not found")
+                        start_month = 1
+                        break
 
-                move_previous_year_button = None
-                with inspect_mode(driver, timeout_sec) as wait2:
-                    _LOGGER.debug("Waiting until a clickable next button is available")
-                    move_previous_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-jFkwbb ruuVe']"]))
-                if not move_previous_year_button:
-                    _LOGGER.info("Breaking this year because previous button is not found")
-                    start_month = 1
-                    break
-
-                _LOGGER.info("Moving previous year of %s ", year)
-                move_previous_year_button.click()
-                time.sleep(INTERVAL)
-
-            ## Iterate over years
-            while year <= end_year:
-
-                _LOGGER.info("Starting year %s", year)
-
-                end_month_of_this_year = 12 if year != end_year else end_month
-                month: int
-                for month in range(start_month, end_month_of_this_year + 1):
-
-                    _LOGGER.debug("Waiting until a clickable %s-th month button is available", month)
-                    month_button: WebElement = wait.until(EC.element_to_be_clickable([By.XPATH, f"//li[text()='{month}']"]))
-                    if "jAQwgG" in month_button.get_attribute("class"):
-                        # selected
-                        _LOGGER.info("Already at month %s", month)
-                    else:
-                        # if month_button.is_displayed() and month_button.is_enabled(): # dont work
-                        if "RJZN" in month_button.get_attribute("class"):
-                            _LOGGER.info("Moving %s-th month", month)
-                            month_button.click()
-                            time.sleep(INTERVAL)
-                        else:
-                            _LOGGER.info("Found month %s does not have data", month)
-                            continue
-
-                    _LOGGER.debug("Waiting until a clickable upper left grid item is available")
-                    first_grid_item: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "virtuoso-grid-item"]))
-
-                    _LOGGER.info("Clicking the upper left grid item")
-                    first_grid_item.click()
+                    _LOGGER.info("Moving previous year of %s ", year)
+                    move_previous_year_button.click()
                     time.sleep(INTERVAL)
 
-                    idx: int = 0
-                    last_date_s = None
-                    while True:
+                ## Iterate over years
+                while year <= end_year:
 
-                        _LOGGER.debug("Waiting until a visible date text is available")
-                        date_elem: WebElement = wait.until(EC.visibility_of_element_located([By.CLASS_NAME, "sc-dWbSDx"]))
-                        date_s: str = date_elem.text
-                        _LOGGER.info("Found date %s", date_s)
+                    _LOGGER.info("Starting year %s", year)
 
-                        if date_s != last_date_s:
-                            idx = 0
-                            last_date_s = date_s
+                    end_month_of_this_year = 12 if year != end_year else end_month
+                    month: int
+                    for month in range(start_month, end_month_of_this_year + 1):
 
-                        year_i, month_i, day_i = parse_date_str_int(date_s)
-
-                        tareget_basename = f"wellnote_{year_i:04}-{month_i:02}-{day_i:02}_{idx:03}"
-                        target_dir = os.path.join(download_dir, "wellnote", "album", f"{year_i:04}")
-                        target_filepath_woe = os.path.join(target_dir, tareget_basename)
-
-                        # if os.path.exists(target_filepath):
-                        if glob.glob(target_filepath_woe + ".*"):
-                            _LOGGER.warning("Skipping    %s because it exists", target_filepath_woe.replace(os.getcwd(), "."))
+                        _LOGGER.debug("Waiting until a clickable %s-th month button is available", month)
+                        month_button: WebElement = wait.until(EC.element_to_be_clickable([By.XPATH, f"//li[text()='{month}']"]))
+                        if "jAQwgG" in month_button.get_attribute("class"):
+                            # selected
+                            _LOGGER.info("Already at month %s", month)
                         else:
-
-                            _LOGGER.debug("Waiting until a clickable vdots button is available")
-                            vdots_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-hCwLRM"]))
-                            _LOGGER.info("Clicking vdots button")
-                            vdots_button.click()
-
-                            _LOGGER.debug("Waiting until a clickable download button is available")
-                            download_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-hLVXRe"]))
-
-                            with safe_download(driver, wait, download_dir) as download_result:
-                                _LOGGER.warning("Downloading %s", target_filepath_woe.replace(os.getcwd(), "."))
-                                _LOGGER.info("Clicking download button")
-                                download_button.click()
+                            # if month_button.is_displayed() and month_button.is_enabled(): # dont work
+                            if "RJZN" in month_button.get_attribute("class"):
+                                _LOGGER.info("Moving %s-th month", month)
+                                month_button.click()
                                 time.sleep(INTERVAL)
+                            else:
+                                _LOGGER.info("Found month %s does not have data", month)
+                                continue
 
-                            downloaded_filepath: str = download_result.downloaded_filepath
+                        _LOGGER.debug("Waiting until a clickable upper left grid item is available")
+                        first_grid_item: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "virtuoso-grid-item"]))
 
-                            extension: str = downloaded_filepath.split(".")[-1]
-                            target_filepath = target_filepath_woe + "." + extension
+                        _LOGGER.info("Clicking the upper left grid item")
+                        first_grid_item.click()
+                        time.sleep(INTERVAL)
 
-                            os.makedirs(os.path.join(target_dir), exist_ok=True)
-                            shutil.move(downloaded_filepath, target_filepath)
+                        idx: int = 0
+                        last_date_s = None
+                        while True:
 
-                        swiper_button_next = None
-                        with inspect_mode(driver, timeout_sec) as wait2:
-                            _LOGGER.debug("Waiting until a clickable next button is available")
-                            swiper_button_next: WebElement = wait2.until(EC.element_to_be_clickable([By.CLASS_NAME, "swiper-button-next"]))
-                        if not swiper_button_next \
-                        or "swiper-button-disabled" in swiper_button_next.get_attribute("class"):
-                            _LOGGER.info("Breaking this month because next button is not found")
-                            break
+                            _LOGGER.debug("Waiting until a visible date text is available")
+                            date_elem: WebElement = wait.until(EC.visibility_of_element_located([By.CLASS_NAME, "sc-dWbSDx"]))
+                            date_s: str = date_elem.text
+                            _LOGGER.info("Found date %s", date_s)
 
-                        _LOGGER.info("Clicking the swiper_button_next")
-                        swiper_button_next.click()
-                        # time.sleep(INTERVAL)
+                            if date_s != last_date_s:
+                                idx = 0
+                                last_date_s = date_s
 
-                        idx += 1
+                            year_i, month_i, day_i = parse_date_str_int(date_s)
 
-                    _LOGGER.debug("Waiting until a clickable html body is available")
-                    close_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-edERGn jYcwJ']"]))
+                            tareget_basename = f"wellnote_{year_i:04}-{month_i:02}-{day_i:02}_{idx:03}"
+                            target_dir = os.path.join(download_dir, "wellnote", "album", f"{year_i:04}")
+                            target_filepath_woe = os.path.join(target_dir, tareget_basename)
 
-                    _LOGGER.info("Closing the preview window")
-                    close_button.click()
+                            # if os.path.exists(target_filepath):
+                            if glob.glob(target_filepath_woe + ".*"):
+                                _LOGGER.warning("Skipping    %s because it exists", target_filepath_woe.replace(os.getcwd(), "."))
+                            else:
 
-                move_next_year_button = None
-                with inspect_mode(driver, timeout_sec) as wait2:
-                    _LOGGER.debug("Waiting until a clickable next year button is available")
-                    move_next_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-jFkwbb lbXnTj']"]))
-                if not move_next_year_button:
-                    _LOGGER.info("Breaking this year because next year button is not found")
-                    break
+                                _LOGGER.debug("Waiting until a clickable vdots button is available")
+                                vdots_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-hCwLRM"]))
+                                _LOGGER.info("Clicking vdots button")
+                                vdots_button.click()
 
-                _LOGGER.info("Moving the next year of %s ", year)
-                move_next_year_button.click()
-                time.sleep(INTERVAL)
+                                _LOGGER.debug("Waiting until a clickable download button is available")
+                                download_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-hLVXRe"]))
 
-                year += 1
-                start_month = 1
+                                with safe_download(driver, wait, download_dir) as download_result:
+                                    _LOGGER.warning("Downloading %s", target_filepath_woe.replace(os.getcwd(), "."))
+                                    _LOGGER.info("Clicking download button")
+                                    download_button.click()
+                                    time.sleep(INTERVAL)
+
+                                downloaded_filepath: str = download_result.downloaded_filepath
+
+                                extension: str = downloaded_filepath.split(".")[-1]
+                                target_filepath = target_filepath_woe + "." + extension
+
+                                os.makedirs(os.path.join(target_dir), exist_ok=True)
+                                shutil.move(downloaded_filepath, target_filepath)
+
+                            swiper_button_next = None
+                            with inspect_mode(driver, timeout_sec) as wait2:
+                                _LOGGER.debug("Waiting until a clickable next button is available")
+                                swiper_button_next: WebElement = wait2.until(EC.element_to_be_clickable([By.CLASS_NAME, "swiper-button-next"]))
+                            if not swiper_button_next \
+                            or "swiper-button-disabled" in swiper_button_next.get_attribute("class"):
+                                _LOGGER.info("Breaking this month because next button is not found")
+                                break
+
+                            _LOGGER.info("Clicking the swiper_button_next")
+                            swiper_button_next.click()
+                            # time.sleep(INTERVAL)
+
+                            idx += 1
+
+                        _LOGGER.debug("Waiting until a clickable html body is available")
+                        close_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-edERGn jYcwJ']"]))
+
+                        _LOGGER.info("Closing the preview window")
+                        close_button.click()
+
+                    move_next_year_button = None
+                    with inspect_mode(driver, timeout_sec) as wait2:
+                        _LOGGER.debug("Waiting until a clickable next year button is available")
+                        move_next_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-jFkwbb lbXnTj']"]))
+                    if not move_next_year_button:
+                        _LOGGER.info("Breaking this year because next year button is not found")
+                        break
+
+                    _LOGGER.info("Moving the next year of %s ", year)
+                    move_next_year_button.click()
+                    time.sleep(INTERVAL)
+
+                    year += 1
+                    start_month = 1
+    finally:
+        driver.quit()
     return 0
 
 
@@ -489,17 +536,15 @@ def main_cli(*args: list[str]) -> int:
             key2value["end_year"] = int(end_yearmonth.split("-")[0])
             key2value["end_month"] = int(end_yearmonth.split("-")[1])
 
-    ans:int = 0
     if "handler" in key2value:
         handler = key2value.pop("handler")
-        ans = handler(**key2value)
+        ans: int = handler(**key2value)
+        if ans == 0:
+            _LOGGER.info("Cheers!🍺")
     else:
         wellnote_downloader_ap.print_help()
 
-    if ans == 0:
-        _LOGGER.info("Cheers!🍺")
     return ans
-
 
 if __name__ == "__main__":
     sys.exit(main_cli(*sys.argv[1:]))

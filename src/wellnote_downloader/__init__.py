@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.4.1"
+__version__ = "0.3.2"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -61,7 +61,7 @@ def parse_date_str_int(date_s: str) -> tuple[str, str, str]:
 # Utilities for Selenium
 
 
-def get_driver_and_wait(download_dir: str = None, browser: str = None) -> tuple[WebDriver, WebDriverWait, int]:
+def get_driver_and_wait(download_dir: str = None, browser: str = None) -> tuple[WebDriver, WebDriverWait, str, int]:
 
     timeout_sec: int = 60
 
@@ -88,8 +88,13 @@ def get_driver_and_wait(download_dir: str = None, browser: str = None) -> tuple[
         raise ValueError(f"browser type '{browser}' is not supported.")
     driver.implicitly_wait(timeout_sec)
     wait: WebDriverWait = WebDriverWait(driver, timeout_sec)
-    return driver, wait, timeout_sec
+    return driver, wait, download_dir, timeout_sec
 
+def scroll_to_show_element(driver, element, offset=0):
+    _LOGGER.info("Scrolling window")
+    driver.execute_script("arguments[0].scrollIntoView();", element)
+    if offset != 0:
+        driver.execute_script("window.scrollTo(0, window.pageYOffset + " + str(offset) + ");")
 
 @contextmanager
 def inspect_mode(driver: WebDriver, original_timeout: int, inspect_sec: int = 1):
@@ -138,11 +143,12 @@ def download_is_completed(download_dir: str, last_newest_file: str = None):
     return _f
 
 
-DownloadResult = namedtuple('DownloadResult', 'downloaded_filepath')
-
+class DownloadResult:
+    def __init__(self):
+        self.downloaded_filepath = None
 
 @contextmanager
-def safe_download(driver: WebDriver, wait: WebDriverWait, download_dir: str, target_filepath_prefix: str):
+def safe_download(driver: WebDriver, wait: WebDriverWait, download_dir: str):
 
     filepaths: list[str] = glob.glob(os.path.join(download_dir, "*"))
     last_newest_file = max(filepaths, key=lambda fp: os.path.getmtime(fp)) if filepaths else None
@@ -223,6 +229,46 @@ def wellnote(driver: WebDriver, wait: WebDriverWait, email: str, password: str):
         driver.quit()
 
 
+def download_home(start_year: int = 2009, start_month: int = 1, \
+                   end_year: int = 2023, end_month: int = 12, \
+                   download_dir: str = None, browser: str = None) -> int:
+    _LOGGER.info("Invoking download_home(start_year='%s', start_month='%s', end_year='%s', end_month='%s', download_dir='%s', browser='%s')")
+
+    email: str
+    password: str
+    email, password = get_email_and_password()
+
+    driver: WebDriver
+    wait: WebDriverWait
+    timeout_sec: int
+    driver, wait, timeout_sec = get_driver_and_wait(download_dir, browser)
+
+    with wellnote(driver, wait, email, password):
+        
+        if True: # already in home tab
+
+            data_indexes_done: set[int] = set()
+            home_element_parent: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-dMOJrz"]))
+
+            for i in range(10):
+                home_elements: WebElement = home_element_parent.find_elements(By.XPATH, "./div")
+                for home_element in home_elements:
+                    data_index: int = int(home_element.get_attribute("data-index"))
+                    if data_index not in data_indexes_done:
+                        scroll_to_show_element(driver, home_element)
+
+                        # <time class="sc-hKTqa fqnSS" datetime="2019-11-05T20:05:24+09:00">2019年11月5日</time>
+                        time_elem: WebElement = home_element_parent.find_elements(By.XPATH, ".//time")
+                        datetime_s:str = time_elem.get_attribute("datetime")
+                        datetime_s = datetime_s.split("+")[0] # remove +90:00
+                        _LOGGER.debug("Found home entry at %s", datetime_s)
+
+                        # target_path :str = os.path.join(default_download_dir, str(data_index) + '.jpg')
+                        # home_element.screenshot(target_path)
+                        # data_indexes_done.add(data_index)
+    return 0
+
+
 @contextmanager
 def album_tab(driver: WebDriver, wait: WebDriverWait):
 
@@ -248,7 +294,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
     driver: WebDriver
     wait: WebDriverWait
     timeout_sec: int
-    driver, wait, timeout_sec = get_driver_and_wait(download_dir, browser)
+    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser)
 
     with wellnote(driver, wait, email, password):
 
@@ -260,8 +306,8 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                 _LOGGER.debug("Waiting until a year text is available")
                 # year = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[contains(text(), '年')]"])) # dont work
-                year_text: str = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[@class='sc-bOtlzW fgPidp']"]))
-                year = int(year_text.text.replace("年", ""))
+                year_elem: WebElement = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[@class='sc-bOtlzW fgPidp']"]))
+                year = int(year_elem.text.replace("年", ""))
 
                 if year == start_year:
                     break
@@ -412,13 +458,22 @@ def main_cli(*args: list[str]) -> int:
 
     sub_parsers_action: Action = wellnote_downloader_ap.add_subparsers(help="sub commands")
 
+    ## "wellnote_downloader home" command
+    wellnote_downloader_home_ap: ArgumentParser = sub_parsers_action.add_parser("home", help="download home")
+    wellnote_downloader_home_ap.add_argument("--start", dest="start_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="Start year month")
+    wellnote_downloader_home_ap.add_argument("--end", dest="end_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="End year month")
+    wellnote_downloader_home_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
+    wellnote_downloader_home_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
+    wellnote_downloader_home_ap.set_defaults(handler=download_home)
+
     ## "wellnote_downloader album" command
     wellnote_downloader_album_ap: ArgumentParser = sub_parsers_action.add_parser("album", help="download album")
-    wellnote_downloader_album_ap.add_argument("--start", dest="start_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="start year month")
-    wellnote_downloader_album_ap.add_argument("--end", dest="end_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="end year month")
+    wellnote_downloader_album_ap.add_argument("--start", dest="start_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="Start year month")
+    wellnote_downloader_album_ap.add_argument("--end", dest="end_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="End year month")
     wellnote_downloader_album_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_album_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
     wellnote_downloader_album_ap.set_defaults(handler=download_album)
+
 
     arg_ns: Namespace = wellnote_downloader_ap.parse_args(args)
     key2value = vars(arg_ns)
@@ -434,6 +489,7 @@ def main_cli(*args: list[str]) -> int:
             key2value["end_year"] = int(end_yearmonth.split("-")[0])
             key2value["end_month"] = int(end_yearmonth.split("-")[1])
 
+    ans:int = 0
     if "handler" in key2value:
         handler = key2value.pop("handler")
         ans = handler(**key2value)

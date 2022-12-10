@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -38,6 +38,9 @@ from selenium.webdriver.firefox.service import Service as FirefoxService
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 from webdriver_manager.chrome import ChromeDriverManager
 from webdriver_manager.firefox import GeckoDriverManager
+
+from selenium.common.exceptions import StaleElementReferenceException
+
 
 # logger
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -76,19 +79,37 @@ def get_driver_and_wait(download_dir: str = None, browser: str = None) -> tuple[
     driver: WebDriver = None
     if browser == "chrome":
         chrome_options = webdriver.ChromeOptions()
+        
+        chrome_options.add_argument("--user-data-dir=/tmp/myprofile")
+
         prefs = {'download.default_directory': download_dir}
         chrome_options.add_experimental_option('prefs', prefs)
+
         driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), chrome_options=chrome_options)
     elif browser == "firefox":
         options = FirefoxOptions()
+
+        # os.makedirs(os.path.join("/tmp/wellnote_downloader/firefox_cache"), exist_ok=True)
+        # options.add_argument('-profile')
+        # options.add_argument("/tmp/wellnote_downloader/firefox_cache")
+
         options.set_preference("browser.download.folderList", 2)
         options.set_preference("browser.download.dir", download_dir)
-        driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), options=options)
+
+        driver = webdriver.Firefox(service=FirefoxService(GeckoDriverManager().install()), \
+                                    options=options)
     else:
         raise ValueError(f"browser type '{browser}' is not supported.")
     driver.implicitly_wait(timeout_sec)
     wait: WebDriverWait = WebDriverWait(driver, timeout_sec)
     return driver, wait, download_dir, timeout_sec
+
+def is_attached(elem):
+    try:
+        elem.is_enabled()
+        return True
+    except StaleElementReferenceException:
+        return False
 
 def scroll_to_show_element(driver, element, offset=0):
     _LOGGER.debug("Scrolling window to locate the element in window")
@@ -108,6 +129,25 @@ def inspect_mode(driver: WebDriver, original_timeout: int, inspect_sec: int = 1)
         pass
     finally:
         driver.implicitly_wait(original_timeout)
+
+class EC_OR:
+
+    def __init__(self, timeout_sec, *args):
+        self.timeout_sec = timeout_sec
+        self.conditions = args
+    
+    def __call__(self, driver):
+        with inspect_mode(driver, self.timeout_sec):
+            for idx, condition in enumerate(self.conditions):
+                time.sleep(INTERVAL)
+                try:
+                    _LOGGER.debug("Waiting for condition %s / %s", idx + 1, len(self.conditions))
+                    ans = condition(driver)
+                    if ans:
+                        return ans, idx
+                except Exception:
+                    pass
+            return False
 
 
 def download_is_completed(download_dir: str, last_newest_file: str = None):
@@ -195,35 +235,45 @@ def wellnote(driver: WebDriver, wait: WebDriverWait, email: str, password: str):
         driver.get("https://wellnote.jp/")
         time.sleep(INTERVAL)
 
-        _LOGGER.debug("Waiting until a clickable login button is available")
-        # <a variant="secondary" class="sc-ieecCq dqGvSl" href="/login">ログイン</a>
-        login_button: WebElement = wait.until(EC.element_to_be_clickable([By.XPATH, "//a[@href='/login']"]))
+        _, condition_idx = wait.until(
+            EC_OR(wait._timeout,
+                EC.element_to_be_clickable([By.XPATH, "//a[@href='/login']"]),
+                EC.element_to_be_clickable([By.XPATH, "//a[@href='/albums']"])
+            )
+        )
 
-        _LOGGER.info("Clicking the login button")
-        login_button.click()
+        if condition_idx == 1: # reuse session
+            _LOGGER.info("Found past login session. Omitting the login process.")
+        else:
+            _LOGGER.debug("Waiting until a clickable login button is available")
+            # <a variant="secondary" class="sc-ieecCq dqGvSl" href="/login">ログイン</a>
+            login_button: WebElement = wait.until(EC.element_to_be_clickable([By.XPATH, "//a[@href='/login']"]))
 
-        if True:
-            wait.until(EC.staleness_of(login_button))
+            _LOGGER.info("Clicking the login button")
+            login_button.click()
 
-            _LOGGER.debug("Waiting until a clickable login form is available")
-            # <input id="loginId" type="email" autocomplete="username" inputmode="email" aria-required="true" name="loginId" class="sc-hmjpVf cdjdxJ">
-            login_id_form: WebElement = wait.until(EC.element_to_be_clickable([By.ID, "loginId"]))
-            login_id_form.click()
-            login_id_form.send_keys(email)
+            if True:
+                wait.until(EC.staleness_of(login_button))
 
-            _LOGGER.debug("Waiting until a clickable password form is available")
-            # <input id="password" type="password" autocomplete="current-password" aria-required="true" name="password" class="sc-hmjpVf cdjdxJ">
-            password_form: WebElement = wait.until(EC.element_to_be_clickable([By.ID, "password"]))
-            password_form.click()
-            password_form.send_keys(password)
+                _LOGGER.debug("Waiting until a clickable login form is available")
+                # <input id="loginId" type="email" autocomplete="username" inputmode="email" aria-required="true" name="loginId" class="sc-hmjpVf cdjdxJ">
+                login_id_form: WebElement = wait.until(EC.element_to_be_clickable([By.ID, "loginId"]))
+                login_id_form.click()
+                login_id_form.send_keys(email)
 
-            _LOGGER.info("Sending the login form")
-            password_form.send_keys(Keys.ENTER)
-            time.sleep(INTERVAL)
+                _LOGGER.debug("Waiting until a clickable password form is available")
+                # <input id="password" type="password" autocomplete="current-password" aria-required="true" name="password" class="sc-hmjpVf cdjdxJ">
+                password_form: WebElement = wait.until(EC.element_to_be_clickable([By.ID, "password"]))
+                password_form.click()
+                password_form.send_keys(password)
 
-            wait.until(EC.staleness_of(password_form))
+                _LOGGER.info("Sending the login form")
+                password_form.send_keys(Keys.ENTER)
+                time.sleep(INTERVAL)
 
-            yield
+                wait.until(EC.staleness_of(password_form))
+        
+        yield
 
     finally:
         driver.quit()
@@ -233,7 +283,6 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
                    download_dir: str = None, browser: str = None) -> int:
     _LOGGER.info("Invoking download_home(start_year='%s', start_month='%s', end_year='%s', end_month='%s', download_dir='%s', browser='%s')")
-    # _LOGGER.setLevel(logging.DEBUG)
 
     email: str
     password: str
@@ -257,21 +306,26 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
             if True: # already in home tab
 
                 data_indexes_done: set[int] = set()
-                home_element_parent: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-dMOJrz"]))
 
                 sequence_check_count: int = 0
                 while True:
                     
+                    home_element_parent: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-dMOJrz"]))
                     home_elements: WebElement = home_element_parent.find_elements(By.XPATH, "./div")
                     _LOGGER.debug("Found %s home elements in display.", len(home_elements))
 
                     for home_element in home_elements:
-                        scroll_to_show_element(driver, home_element)
-                        time.sleep(INTERVAL)
+                        
+                        if not is_attached(home_element): # attached
+                            sequence_check_count = 0
+                            break
+
                         data_index: int = int(home_element.get_attribute("data-index"))
                         
                         if data_index not in data_indexes_done:
-
+                            scroll_to_show_element(driver, home_element)
+                            time.sleep(INTERVAL)
+                            
                             # <time class="sc-hKTqa fqnSS" datetime="2019-11-05T20:05:24+09:00">2019年11月5日</time>
                             time_elem: WebElement = home_element.find_element(By.XPATH, ".//time")
                             datetime_iso_s:str = time_elem.get_attribute("datetime")
@@ -295,17 +349,23 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
 
                             data_indexes_done.add(data_index)
                             
-                            # elem_height: int = home_element.size['height']
-                            # _LOGGER.debug("Scrolling the captured element to see next element with its heights=%s", elem_height)
-                            # driver.execute_script(f"window.scrollBy(0, {elem_height});")
-                            # time.sleep(INTERVAL)
                             sequence_check_count = 0
                             break
                     else:
                         sequence_check_count += 1
-                        if sequence_check_count >= 4:
+                        if sequence_check_count >= 2:
                             _LOGGER.info("Found the end of the home element sequence")
                             break
+                    
+                    if home_element:
+                        if not is_attached(home_element): # attached
+                            sequence_check_count = 0
+                            break
+
+                        elem_height: int = home_element.size['height']
+                        _LOGGER.debug("Scrolling the captured element to see next element with its heights=%s", elem_height)
+                        driver.execute_script(f"window.scrollBy(0, {elem_height / 10});")
+                    
 
     finally:
         driver.quit()
@@ -547,4 +607,5 @@ def main_cli(*args: list[str]) -> int:
     return ans
 
 if __name__ == "__main__":
-    sys.exit(main_cli(*sys.argv[1:]))
+    # sys.exit(main_cli(*sys.argv[1:]))
+    sys.exit(main_cli("home"))

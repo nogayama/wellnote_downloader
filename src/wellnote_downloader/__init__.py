@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.8.0"
+__version__ = "0.9.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -47,7 +47,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 
 LOG_FORMAT: str = '%(asctime)s |  %(levelname)-7s | %(message)s (%(filename)s L%(lineno)s %(name)s)'
 
-INTERVAL: int = 1
+DEFAULT_INTERVAL: int = 1
 
 
 def parse_date_str_int(date_s: str) -> tuple[str, str, str]:
@@ -139,14 +139,15 @@ def inspect_mode(driver: WebDriver, original_timeout: int, inspect_sec: int = 1)
 
 class EC_OR:
 
-    def __init__(self, timeout_sec, *args):
+    def __init__(self, timeout_sec, interval=DEFAULT_INTERVAL, *args):
         self.timeout_sec = timeout_sec
+        self.interval = interval
         self.conditions = args
     
     def __call__(self, driver):
         with inspect_mode(driver, self.timeout_sec):
             for idx, condition in enumerate(self.conditions):
-                time.sleep(INTERVAL)
+                time.sleep(self.interval)
                 try:
                     _LOGGER.debug("Waiting for condition %s / %s", idx + 1, len(self.conditions))
                     ans = condition(driver)
@@ -236,16 +237,16 @@ def get_email_and_password() -> tuple[str, str]:
 
 
 @contextmanager
-def wellnote(driver: WebDriver, wait: WebDriverWait, email: str, password: str):
+def wellnote(driver: WebDriver, wait: WebDriverWait, interval: int, email: str, password: str):
     try:
         _LOGGER.info("Geting wellnote.jp")
         driver.get("https://wellnote.jp/")
-        time.sleep(INTERVAL)
+        time.sleep(interval)
 
-        _, condition_idx = wait.until(
-            EC_OR(wait._timeout,
-                EC.element_to_be_clickable([By.XPATH, "//a[@href='/login']"]),
-                EC.element_to_be_clickable([By.XPATH, "//a[@href='/albums']"])
+        _, condition_idx = wait.until( \
+            EC_OR(wait._timeout, interval, \
+                EC.element_to_be_clickable([By.XPATH, "//a[@href='/login']"]), \
+                EC.element_to_be_clickable([By.XPATH, "//a[@href='/albums']"]) \
             )
         )
 
@@ -276,7 +277,7 @@ def wellnote(driver: WebDriver, wait: WebDriverWait, email: str, password: str):
 
                 _LOGGER.info("Sending the login form")
                 password_form.send_keys(Keys.ENTER)
-                time.sleep(INTERVAL)
+                time.sleep(interval)
 
                 wait.until(EC.staleness_of(password_form))
         
@@ -288,8 +289,8 @@ def wellnote(driver: WebDriver, wait: WebDriverWait, email: str, password: str):
 
 def download_home(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
+                   interval: int = DEFAULT_INTERVAL, \
                    download_dir: str = None, browser: str = None, enable_profile:bool=False) -> int:
-    _LOGGER.info("Invoking download_home(start_year='%s', start_month='%s', end_year='%s', end_month='%s', download_dir='%s', browser='%s')")
 
     email: str; password: str
     email, password = get_email_and_password()
@@ -298,13 +299,13 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
     driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, enable_profile)
     try:
         driver.maximize_window()
-        with wellnote(driver, wait, email, password):
+        with wellnote(driver, wait, interval, email, password):
 
             _LOGGER.info("Deleting your family element")
             # <div class="sc-dkQkyq kcvKs"><div translate="no" class="sc-jivBlf fDaukR">あなたの家族</div></div>
             your_family_elem = driver.find_element(By.CLASS_NAME, 'sc-dkQkyq')
             driver.execute_script("var element = arguments[0]; element.parentNode.removeChild(element); ", your_family_elem)
-            time.sleep(INTERVAL)
+            time.sleep(interval)
             
             if True: # already in home tab
 
@@ -327,7 +328,7 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                         
                         if data_index not in data_indexes_done:
                             scroll_to_show_element(driver, home_element)
-                            time.sleep(INTERVAL)
+                            time.sleep(interval)
                             
                             # <time class="sc-hKTqa fqnSS" datetime="2019-11-05T20:05:24+09:00">2019年11月5日</time>
                             time_elem: WebElement = home_element.find_element(By.XPATH, ".//time")
@@ -347,7 +348,7 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                             else:
                                 _LOGGER.warning("Downloading %s because it exists", target_path.replace(os.getcwd(), "."))
                                 os.makedirs(os.path.join(target_dir), exist_ok=True)
-                                time.sleep(INTERVAL)
+                                time.sleep(interval)
                                 home_element.screenshot(target_path)
 
                             data_indexes_done.add(data_index)
@@ -377,7 +378,8 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
 
 
 @contextmanager
-def album_tab(driver: WebDriver, wait: WebDriverWait):
+def album_tab(driver: WebDriver, wait: WebDriverWait, \
+                   interval: int = DEFAULT_INTERVAL):
 
     _LOGGER.debug("Waiting until a clickable albums button is available")
     # <a class="sc-jWWnA hivVBT" href="/albums">
@@ -385,14 +387,14 @@ def album_tab(driver: WebDriver, wait: WebDriverWait):
 
     _LOGGER.info("Clicking the album button")
     album_button.click()
-    time.sleep(INTERVAL)
+    time.sleep(interval)
 
     yield
 
 def download_album(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
+                   interval: int = DEFAULT_INTERVAL, \
                    download_dir: str = None, browser: str = None, enable_profile=False) -> int:
-    _LOGGER.info("Invoking download_album(start_year='%s', start_month='%s', end_year='%s', end_month='%s', download_dir='%s', browser='%s')")
 
     email: str; password: str
     email, password = get_email_and_password()
@@ -401,9 +403,9 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
     driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, enable_profile)
 
     try:
-        with wellnote(driver, wait, email, password):
+        with wellnote(driver, wait, interval, email, password):
 
-            with album_tab(driver, wait):
+            with album_tab(driver, wait, interval):
 
                 ## Go to start year
                 year: int = 9999
@@ -428,7 +430,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                     _LOGGER.info("Moving previous year of %s ", year)
                     move_previous_year_button.click()
-                    time.sleep(INTERVAL)
+                    time.sleep(interval)
 
                 ## Iterate over years
                 while year <= end_year:
@@ -449,7 +451,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                             if "RJZN" in month_button.get_attribute("class"):
                                 _LOGGER.info("Moving %s-th month", month)
                                 month_button.click()
-                                time.sleep(INTERVAL)
+                                time.sleep(interval)
                             else:
                                 _LOGGER.info("Found month %s does not have data", month)
                                 continue
@@ -459,7 +461,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                         _LOGGER.info("Clicking the upper left grid item")
                         first_grid_item.click()
-                        time.sleep(INTERVAL)
+                        time.sleep(interval)
 
                         idx: int = 0
                         last_date_s = None
@@ -497,7 +499,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                                     _LOGGER.warning("Downloading %s", target_filepath_woe.replace(os.getcwd(), "."))
                                     _LOGGER.info("Clicking download button")
                                     download_button.click()
-                                    time.sleep(INTERVAL)
+                                    time.sleep(interval)
 
                                 downloaded_filepath: str = download_result.downloaded_filepath
 
@@ -518,7 +520,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                             _LOGGER.info("Clicking the swiper_button_next")
                             swiper_button_next.click()
-                            # time.sleep(INTERVAL)
+                            # time.sleep(interval)
 
                             idx += 1
 
@@ -538,7 +540,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                     _LOGGER.info("Moving the next year of %s ", year)
                     move_next_year_button.click()
-                    time.sleep(INTERVAL)
+                    time.sleep(interval)
 
                     year += 1
                     start_month = 1
@@ -578,6 +580,7 @@ def main_cli(*args: list[str]) -> int:
     wellnote_downloader_home_ap: ArgumentParser = sub_parsers_action.add_parser("home", help="download home")
     wellnote_downloader_home_ap.add_argument("--start", dest="start_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="Start year month")
     wellnote_downloader_home_ap.add_argument("--end", dest="end_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="End year month")
+    wellnote_downloader_home_ap.add_argument("--interval", dest="interval", metavar="INT", nargs=None, type=int, default=DEFAULT_INTERVAL, help="Sleep time (sec) before sending next browser event")
     wellnote_downloader_home_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_home_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
     wellnote_downloader_home_ap.add_argument('--enable-profile', dest="enable_profile", action='store_true', default=False, help="Enable browser profile to reuse session, loaded files, etc.")
@@ -588,6 +591,7 @@ def main_cli(*args: list[str]) -> int:
     wellnote_downloader_album_ap: ArgumentParser = sub_parsers_action.add_parser("album", help="download album")
     wellnote_downloader_album_ap.add_argument("--start", dest="start_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="Start year month")
     wellnote_downloader_album_ap.add_argument("--end", dest="end_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="End year month")
+    wellnote_downloader_album_ap.add_argument("--interval", dest="interval", metavar="INT", nargs=None, type=int, default=DEFAULT_INTERVAL, help="Sleep time (sec) before sending next browser event")
     wellnote_downloader_album_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_album_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
     wellnote_downloader_album_ap.add_argument('--enable-profile', dest="enable_profile", action='store_true', default=False, help="Enable browser profile to reuse session, loaded files, etc.")
@@ -605,6 +609,7 @@ def main_cli(*args: list[str]) -> int:
         log_level: str = key2value.pop("log_level")
         if log_level:
             _LOGGER.setLevel(log_level.upper())
+
 
     if "start_yearmonth" in key2value:
         start_yearmonth = key2value.pop("start_yearmonth")

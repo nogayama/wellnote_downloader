@@ -10,11 +10,10 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
-from collections import namedtuple
 from contextlib import contextmanager
 from getpass import getpass
 import glob
@@ -23,6 +22,7 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import time
 
 from selenium import webdriver
@@ -64,7 +64,7 @@ def parse_date_str_int(date_s: str) -> tuple[str, str, str]:
 # Utilities for Selenium
 
 
-def get_driver_and_wait(download_dir: str = None, browser: str = None) -> tuple[WebDriver, WebDriverWait, str, int]:
+def get_driver_and_wait(download_dir: str = None, browser: str = None, enable_profile = False) -> tuple[WebDriver, WebDriverWait, str, int]:
 
     timeout_sec: int = 60
 
@@ -80,7 +80,11 @@ def get_driver_and_wait(download_dir: str = None, browser: str = None) -> tuple[
     if browser == "chrome":
         chrome_options = webdriver.ChromeOptions()
         
-        chrome_options.add_argument("--user-data-dir=/tmp/myprofile")
+        if enable_profile:
+            profile_dir: str = os.path.join(tempfile.gettempdir(), "wellnote_downloader", "chrome_profile")
+            _LOGGER.info("Using profile dir to reuse session with semi persistent temporary directory: %s", profile_dir)
+            os.makedirs(profile_dir, exist_ok=True)
+            chrome_options.add_argument(f"--user-data-dir='{profile_dir}'")
 
         prefs = {'download.default_directory': download_dir}
         chrome_options.add_experimental_option('prefs', prefs)
@@ -88,10 +92,13 @@ def get_driver_and_wait(download_dir: str = None, browser: str = None) -> tuple[
         driver = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()), chrome_options=chrome_options)
     elif browser == "firefox":
         options = FirefoxOptions()
-
-        # os.makedirs(os.path.join("/tmp/wellnote_downloader/firefox_cache"), exist_ok=True)
-        # options.add_argument('-profile')
-        # options.add_argument("/tmp/wellnote_downloader/firefox_cache")
+        
+        if enable_profile:
+            profile_dir: str = os.path.join(tempfile.gettempdir(), "wellnote_downloader", "firefox_profile")
+            _LOGGER.info("Using profile dir to reuse session with semi persistent temporary directory: %s", profile_dir)
+            os.makedirs(profile_dir, exist_ok=True)
+            options.add_argument('-profile')
+            options.add_argument(profile_dir)
 
         options.set_preference("browser.download.folderList", 2)
         options.set_preference("browser.download.dir", download_dir)
@@ -281,18 +288,14 @@ def wellnote(driver: WebDriver, wait: WebDriverWait, email: str, password: str):
 
 def download_home(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
-                   download_dir: str = None, browser: str = None) -> int:
+                   download_dir: str = None, browser: str = None, enable_profile:bool=False) -> int:
     _LOGGER.info("Invoking download_home(start_year='%s', start_month='%s', end_year='%s', end_month='%s', download_dir='%s', browser='%s')")
 
-    email: str
-    password: str
+    email: str; password: str
     email, password = get_email_and_password()
 
-    driver: WebDriver
-    wait: WebDriverWait
-    timeout_sec: int
-
-    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser)
+    driver: WebDriver; wait: WebDriverWait; timeout_sec: int
+    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, enable_profile)
     try:
         driver.maximize_window()
         with wellnote(driver, wait, email, password):
@@ -388,18 +391,15 @@ def album_tab(driver: WebDriver, wait: WebDriverWait):
 
 def download_album(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
-                   download_dir: str = None, browser: str = None) -> int:
+                   download_dir: str = None, browser: str = None, enable_profile=False) -> int:
     _LOGGER.info("Invoking download_album(start_year='%s', start_month='%s', end_year='%s', end_month='%s', download_dir='%s', browser='%s')")
 
-    email: str
-    password: str
+    email: str; password: str
     email, password = get_email_and_password()
 
-    driver: WebDriver
-    wait: WebDriverWait
-    timeout_sec: int
+    driver: WebDriver; wait: WebDriverWait; timeout_sec: int
+    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, enable_profile)
 
-    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser)
     try:
         with wellnote(driver, wait, email, password):
 
@@ -550,18 +550,27 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 ################################################################################
 # Utilities for CLI
 
+class VersionAction(argparse.Action):
+        
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values, option_string=None):
+        print(__version__)
+        parser.exit()
 
 def main_cli(*args: list[str]) -> int:
     if not args:
         args = sys.argv[1:]
 
     logging.basicConfig(stream=sys.stderr, format=LOG_FORMAT, level=logging.WARNING)
-    _LOGGER.setLevel(logging.INFO)
 
     ## "wellnote_downloader" command
     wellnote_downloader_ap: ArgumentParser = argparse.ArgumentParser( \
         prog="wellnote_downloader", description="Wellnote Downloader", \
         formatter_class=lambda prog: argparse.RawDescriptionHelpFormatter(prog, max_help_position=50, width=320))
+
+    wellnote_downloader_ap.add_argument('--version', nargs=0, action=VersionAction, help="show program's version number and exit")
+
+    _acceptable_levels = list(logging._nameToLevel.keys())
+    _acceptable_levels.remove("NOTSET")
 
     sub_parsers_action: Action = wellnote_downloader_ap.add_subparsers(help="sub commands")
 
@@ -571,6 +580,8 @@ def main_cli(*args: list[str]) -> int:
     wellnote_downloader_home_ap.add_argument("--end", dest="end_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="End year month")
     wellnote_downloader_home_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_home_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
+    wellnote_downloader_home_ap.add_argument('--enable-profile', dest="enable_profile", action='store_true', default=False, help="Enable browser profile to reuse session, loaded files, etc.")
+    wellnote_downloader_home_ap.add_argument('--loglevel', dest="log_level", metavar="LEVEL", nargs=None, default=None, help=f"Log level either {_acceptable_levels}.")
     wellnote_downloader_home_ap.set_defaults(handler=download_home)
 
     ## "wellnote_downloader album" command
@@ -579,11 +590,21 @@ def main_cli(*args: list[str]) -> int:
     wellnote_downloader_album_ap.add_argument("--end", dest="end_yearmonth", metavar="YYYY-MM", nargs=None, default=None, required=False, help="End year month")
     wellnote_downloader_album_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_album_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
+    wellnote_downloader_album_ap.add_argument('--enable-profile', dest="enable_profile", action='store_true', default=False, help="Enable browser profile to reuse session, loaded files, etc.")
+    wellnote_downloader_album_ap.add_argument('--loglevel', dest="log_level", metavar="LEVEL", nargs=None, default=None, help=f"Log level either {_acceptable_levels}.")
     wellnote_downloader_album_ap.set_defaults(handler=download_album)
 
 
     arg_ns: Namespace = wellnote_downloader_ap.parse_args(args)
     key2value = vars(arg_ns)
+
+    if "version" in key2value:
+        del key2value["version"]
+
+    if "log_level" in key2value:
+        log_level: str = key2value.pop("log_level")
+        if log_level:
+            _LOGGER.setLevel(log_level.upper())
 
     if "start_yearmonth" in key2value:
         start_yearmonth = key2value.pop("start_yearmonth")
@@ -603,8 +624,8 @@ def main_cli(*args: list[str]) -> int:
             _LOGGER.info("Cheers!🍺")
     else:
         wellnote_downloader_ap.print_help()
-
-    return ans
+    
+    return 1
 
 if __name__ == "__main__":
     # sys.exit(main_cli(*sys.argv[1:]))

@@ -68,42 +68,62 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
 
 ### アルバム内の写真・動画のダウンロード
 
+1. 全部ダウンロードする場合
 
+    ```sh
+    $ wellnote_downloader album
+    ```
 
-1. アルバム内の写真・動画をダウンロードします。2015年の1月から2016年の12月までダウンロードする場合は以下のように実行します。
+    
+
+    > Command not found エラーが出る場合は、`wellnote_downloader` を `python -m wellnote_downloader` にすると動くかもしれません
+    >
+    > ```sh
+    > $ python -m wellnote_downloader album
+    > ```
+
+    
+
+2. 2015年の1月から2016年の12月までダウンロードする場合は以下のように実行します。
+
     ```sh
     $ wellnote_downloader album --start 2015-01  --end 2016-12
     ```
 
     
-    
-    > Command not found エラーが出る場合は、`wellnote_downloader` を `python -m wellnote_downloader` にすると動くかもしれません
-    > ```sh
-    > $ python -m wellnote_downloader album --start 2015-01  --end 2016-12
-    > ```
-    
-    
-    
-2. 今いるフォルダ内に`Downloads`というフォルダができているので、その中のファイルがダウンロードできているか確認します。
+
+3. 今いるフォルダ内に`Downloads`というフォルダができているので、その中のファイルがダウンロードできているか確認します。
 
 
 
 ### ホーム画面の日記のダウンロード（コメント、スタンプ付き）
 
 
-1. アルバム内の写真・動画をダウンロードします。
+1. 全部ダウンロードする場合
+
     ```sh
     $ wellnote_downloader home
     ```
 
     
-    
+
     > Command not found エラーが出る場合は、`wellnote_downloader` を `python -m wellnote_downloader` にすると動くかもしれません
+    >
     > ```sh
     > $ python -m wellnote_downloader home
     > ```
+
     
-2. 今いるフォルダ内に`Downloads`というフォルダができているので、その中のファイルがダウンロードできているか確認します。
+
+2. 2015年の1月から2016年の12月までダウンロードする場合は以下のように実行します。
+
+    ```sh
+    $ wellnote_downloader home --start 2015-01  --end 2016-12
+    ```
+
+    
+
+3. 今いるフォルダ内に`Downloads`というフォルダができているので、その中のファイルがダウンロードできているか確認します。
 
 
 
@@ -118,7 +138,7 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
         ```
         
     1. デフォルトではログインセッションを再利用するので、ユーザーを切り替えたくてもログインプロンプトがでないため切り替えられなくなってしまいます。その場合は一度 `--clear-profiel`オプションをつけて実行して下さい。
-        
+       
         ```sh
         $ wellnote_downloader home --clear-profile
         $ wellnote_downloader album --clear-profile

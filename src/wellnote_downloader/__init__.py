@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -64,7 +64,7 @@ def parse_date_str_int(date_s: str) -> tuple[str, str, str]:
 # Utilities for Selenium
 
 
-def get_driver_and_wait(download_dir: str = None, browser: str = None, enable_profile = False) -> tuple[WebDriver, WebDriverWait, str, int]:
+def get_driver_and_wait(download_dir: str = None, browser: str = None, clear_profile = False) -> tuple[WebDriver, WebDriverWait, str, int]:
 
     timeout_sec: int = 60
 
@@ -80,11 +80,14 @@ def get_driver_and_wait(download_dir: str = None, browser: str = None, enable_pr
     if browser == "chrome":
         chrome_options = webdriver.ChromeOptions()
         
-        if enable_profile:
-            profile_dir: str = os.path.join(tempfile.gettempdir(), "wellnote_downloader", "chrome_profile")
-            _LOGGER.info("Using profile dir to reuse session with semi persistent temporary directory: %s", profile_dir)
-            os.makedirs(profile_dir, exist_ok=True)
-            chrome_options.add_argument(f"--user-data-dir='{profile_dir}'")
+        profile_dir: str = os.path.join(tempfile.gettempdir(), "wellnote_downloader", "chrome_profile")
+        _LOGGER.info("Using profile dir to reuse session with semi persistent temporary directory: %s", profile_dir)
+        if clear_profile:
+            _LOGGER.info("Deleting the profile dir to reset the session")
+            if os.path.exists(profile_dir) and os.path.isdir(profile_dir):
+                shutil.rmtree(profile_dir)
+        os.makedirs(profile_dir, exist_ok=True)
+        chrome_options.add_argument(f"--user-data-dir='{profile_dir}'")
 
         prefs = {'download.default_directory': download_dir}
         chrome_options.add_experimental_option('prefs', prefs)
@@ -93,12 +96,15 @@ def get_driver_and_wait(download_dir: str = None, browser: str = None, enable_pr
     elif browser == "firefox":
         options = FirefoxOptions()
         
-        if enable_profile:
-            profile_dir: str = os.path.join(tempfile.gettempdir(), "wellnote_downloader", "firefox_profile")
-            _LOGGER.info("Using profile dir to reuse session with semi persistent temporary directory: %s", profile_dir)
-            os.makedirs(profile_dir, exist_ok=True)
-            options.add_argument('-profile')
-            options.add_argument(profile_dir)
+        profile_dir: str = os.path.join(tempfile.gettempdir(), "wellnote_downloader", "firefox_profile")
+        _LOGGER.info("Using profile dir to reuse session with semi persistent temporary directory: %s", profile_dir)
+        if clear_profile:
+            _LOGGER.info("Deleting the profile dir to reset the session")
+            if os.path.exists(profile_dir) and os.path.isdir(profile_dir):
+                shutil.rmtree(profile_dir)
+        os.makedirs(profile_dir, exist_ok=True)
+        options.add_argument('-profile')
+        options.add_argument(profile_dir)
 
         options.set_preference("browser.download.folderList", 2)
         options.set_preference("browser.download.dir", download_dir)
@@ -290,13 +296,13 @@ def wellnote(driver: WebDriver, wait: WebDriverWait, interval: int, email: str, 
 def download_home(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
                    interval: int = DEFAULT_INTERVAL, \
-                   download_dir: str = None, browser: str = None, enable_profile:bool=False) -> int:
+                   download_dir: str = None, browser: str = None, clear_profile:bool=False) -> int:
 
     email: str; password: str
     email, password = get_email_and_password()
 
     driver: WebDriver; wait: WebDriverWait; timeout_sec: int
-    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, enable_profile)
+    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, clear_profile)
     try:
         driver.maximize_window()
         with wellnote(driver, wait, interval, email, password):
@@ -394,13 +400,13 @@ def album_tab(driver: WebDriver, wait: WebDriverWait, \
 def download_album(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
                    interval: int = DEFAULT_INTERVAL, \
-                   download_dir: str = None, browser: str = None, enable_profile=False) -> int:
+                   download_dir: str = None, browser: str = None, clear_profile=False) -> int:
 
     email: str; password: str
     email, password = get_email_and_password()
 
     driver: WebDriver; wait: WebDriverWait; timeout_sec: int
-    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, enable_profile)
+    driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, clear_profile)
 
     try:
         with wellnote(driver, wait, interval, email, password):
@@ -583,7 +589,7 @@ def main_cli(*args: list[str]) -> int:
     wellnote_downloader_home_ap.add_argument("--interval", dest="interval", metavar="INT", nargs=None, type=int, default=DEFAULT_INTERVAL, help="Sleep time (sec) before sending next browser event")
     wellnote_downloader_home_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_home_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
-    wellnote_downloader_home_ap.add_argument('--enable-profile', dest="enable_profile", action='store_true', default=False, help="Enable browser profile to reuse session, loaded files, etc.")
+    wellnote_downloader_home_ap.add_argument('--clear-profile', dest="clear_profile", action='store_true', default=False, help="Clear the browser profile to reset session, loaded files, etc.")
     wellnote_downloader_home_ap.add_argument('--loglevel', dest="log_level", metavar="LEVEL", nargs=None, default=None, help=f"Log level either {_acceptable_levels}.")
     wellnote_downloader_home_ap.set_defaults(handler=download_home)
 
@@ -594,7 +600,7 @@ def main_cli(*args: list[str]) -> int:
     wellnote_downloader_album_ap.add_argument("--interval", dest="interval", metavar="INT", nargs=None, type=int, default=DEFAULT_INTERVAL, help="Sleep time (sec) before sending next browser event")
     wellnote_downloader_album_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_album_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
-    wellnote_downloader_album_ap.add_argument('--enable-profile', dest="enable_profile", action='store_true', default=False, help="Enable browser profile to reuse session, loaded files, etc.")
+    wellnote_downloader_album_ap.add_argument('--clear-profile', dest="clear_profile", action='store_true', default=False, help="Clear the browser profile to reset session, loaded files, etc.")
     wellnote_downloader_album_ap.add_argument('--loglevel', dest="log_level", metavar="LEVEL", nargs=None, default=None, help=f"Log level either {_acceptable_levels}.")
     wellnote_downloader_album_ap.set_defaults(handler=download_album)
 

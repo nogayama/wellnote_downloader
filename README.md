@@ -52,20 +52,11 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
     
     コマンドラインから`wellnote_downloader`コマンドを実行できるか確認する。
     ```sh
-    $ wellnote_downloader album --help
-    usage: wellnote_downloader [-h] {album} ...
-    
-    Wellnote Downloader
-    
-    positional arguments:
-      {album}     sub commands
-        album     download album
-    
-    options:
-      -h, --help  show this help message and exit
+    $ wellnote_downloader --version
+    0.10.0
     
     # Command not found エラーが出る場合は、`wellnote_downloader` を `python -m wellnote_downloader` にすると動くかもしれません
-    $ python -m wellnote_downloader album --help
+    $ python -m wellnote_downloader --version
     
     ```
 
@@ -125,8 +116,13 @@ Wellnote からデータをダウンロードするツールです。ブラウ�
         $ export WELLNOTE_EMAIL=あなたのEmailアドレス
         $ export WELLNOTE_PASSWORD=あなたのパスワード
         ```
-
-
+        
+    1. デフォルトではログインセッションを再利用するので、ユーザーを切り替えたくてもログインプロンプトがでないため切り替えられなくなってしまいます。その場合は一度 `--clear-profiel`オプションをつけて実行して下さい。
+        
+        ```sh
+        $ wellnote_downloader home --clear-profile
+        $ wellnote_downloader album --clear-profile
+        ```
 
 
 

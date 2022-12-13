@@ -10,11 +10,12 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
 from contextlib import contextmanager
+from datetime import datetime
 from getpass import getpass
 import glob
 import logging
@@ -304,6 +305,7 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
     driver: WebDriver; wait: WebDriverWait; timeout_sec: int
     driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, clear_profile)
     try:
+        _LOGGER.info("Maximizing browser window")
         driver.maximize_window()
         with wellnote(driver, wait, interval, email, password):
 
@@ -334,13 +336,21 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                         
                         if data_index not in data_indexes_done:
                             scroll_to_show_element(driver, home_element)
-                            time.sleep(interval)
+                            time.sleep(interval/3)
                             
                             # <time class="sc-hKTqa fqnSS" datetime="2019-11-05T20:05:24+09:00">2019年11月5日</time>
                             time_elem: WebElement = home_element.find_element(By.XPATH, ".//time")
                             datetime_iso_s:str = time_elem.get_attribute("datetime")
                             _LOGGER.info("Found data_index=%s, with datetime=%s", data_index, datetime_iso_s)
                             datetime_iso_s = datetime_iso_s.split("+")[0] # remove +90:00
+                            dt: datetime = datetime.strptime(datetime_iso_s, "%Y-%m-%dT%H:%M:%S")
+                            if dt.year > end_year or (dt.year == end_year and dt.month > end_month):
+                                _LOGGER.warning("Skipping    %s because it is not in the target period", datetime_iso_s)
+                                data_indexes_done.add(data_index)
+                                break
+                            if dt.year < start_year or (dt.year == start_year and dt.month < start_month):
+                                _LOGGER.warning("Exiting because we reach the end of the target period: %s", datetime_iso_s)
+                                return 0
 
                             datetime_s = datetime_iso_s.replace(":", "-")
                             datetime_s = datetime_s.replace("T", "_")
@@ -352,7 +362,7 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                             if os.path.exists(target_path):
                                 _LOGGER.warning("Skipping    %s because it exists", target_path.replace(os.getcwd(), "."))
                             else:
-                                _LOGGER.warning("Downloading %s because it exists", target_path.replace(os.getcwd(), "."))
+                                _LOGGER.warning("Downloading %s because it does not exist", target_path.replace(os.getcwd(), "."))
                                 os.makedirs(os.path.join(target_dir), exist_ok=True)
                                 time.sleep(interval)
                                 home_element.screenshot(target_path)

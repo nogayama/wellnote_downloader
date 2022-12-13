@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -146,15 +146,14 @@ def inspect_mode(driver: WebDriver, original_timeout: int, inspect_sec: int = 1)
 
 class EC_OR:
 
-    def __init__(self, timeout_sec, interval=DEFAULT_INTERVAL, *args):
+    def __init__(self, timeout_sec, *args):
         self.timeout_sec = timeout_sec
-        self.interval = interval
         self.conditions = args
     
     def __call__(self, driver):
         with inspect_mode(driver, self.timeout_sec):
             for idx, condition in enumerate(self.conditions):
-                time.sleep(self.interval)
+                time.sleep(1)
                 try:
                     _LOGGER.debug("Waiting for condition %s / %s", idx + 1, len(self.conditions))
                     ans = condition(driver)
@@ -251,7 +250,7 @@ def wellnote(driver: WebDriver, wait: WebDriverWait, interval: int, email: str, 
         time.sleep(interval)
 
         _, condition_idx = wait.until( \
-            EC_OR(wait._timeout, interval, \
+            EC_OR(wait._timeout, \
                 EC.element_to_be_clickable([By.XPATH, "//a[@href='/login']"]), \
                 EC.element_to_be_clickable([By.XPATH, "//a[@href='/albums']"]) \
             )
@@ -298,6 +297,8 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
                    interval: int = DEFAULT_INTERVAL, \
                    download_dir: str = None, browser: str = None, clear_profile:bool=False) -> int:
+    if interval < DEFAULT_INTERVAL:
+        interval = DEFAULT_INTERVAL
 
     email: str; password: str
     email, password = get_email_and_password()
@@ -336,7 +337,7 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                         
                         if data_index not in data_indexes_done:
                             scroll_to_show_element(driver, home_element)
-                            time.sleep(interval/3)
+                            time.sleep(interval/3.0)
                             
                             # <time class="sc-hKTqa fqnSS" datetime="2019-11-05T20:05:24+09:00">2019年11月5日</time>
                             time_elem: WebElement = home_element.find_element(By.XPATH, ".//time")
@@ -411,6 +412,8 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
                    interval: int = DEFAULT_INTERVAL, \
                    download_dir: str = None, browser: str = None, clear_profile=False) -> int:
+    if interval < DEFAULT_INTERVAL:
+        interval = DEFAULT_INTERVAL
 
     email: str; password: str
     email, password = get_email_and_password()
@@ -625,7 +628,6 @@ def main_cli(*args: list[str]) -> int:
         log_level: str = key2value.pop("log_level")
         if log_level:
             _LOGGER.setLevel(log_level.upper())
-
 
     if "start_yearmonth" in key2value:
         start_yearmonth = key2value.pop("start_yearmonth")

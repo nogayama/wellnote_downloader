@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -42,6 +42,7 @@ from webdriver_manager.firefox import GeckoDriverManager
 
 from selenium.common.exceptions import StaleElementReferenceException
 
+import filedate
 
 # logger
 _LOGGER: logging.Logger = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ _LOGGER: logging.Logger = logging.getLogger(__name__)
 LOG_FORMAT: str = '%(asctime)s |  %(levelname)-7s | %(message)s (%(filename)s L%(lineno)s %(name)s)'
 
 DEFAULT_INTERVAL: int = 1
-
+NUM_OF_RETRIES: int = 3
 
 def parse_date_str_int(date_s: str) -> tuple[str, str, str]:
     match: re.Match = re.search("(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日", date_s)
@@ -60,6 +61,17 @@ def parse_date_str_int(date_s: str) -> tuple[str, str, str]:
         return year_i, month_i, day_i
     raise ValueError("Could not parse date_s '%s'", date_s)
 
+def disable_update_time_of_file(filepath, dt):
+    filedate_file = filedate.File(filepath)
+    
+    _LOGGER.debug("Updating time of file='%s' with dt='%s'", filepath, dt)
+    filedate_file.set(
+        created = dt,
+        modified = dt,
+        accessed = dt
+    )
+    
+    os.chmod(filepath, 0o644)
 
 ################################################################################
 # Utilities for Selenium
@@ -296,7 +308,7 @@ def wellnote(driver: WebDriver, wait: WebDriverWait, interval: int, email: str, 
 def download_home(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
                    interval: int = DEFAULT_INTERVAL, \
-                   download_dir: str = None, browser: str = None, clear_profile:bool=False) -> int:
+                   download_dir: str = None, browser: str = None, clear_profile:bool=False, disable_update_time=False) -> int:
     if interval < DEFAULT_INTERVAL:
         interval = DEFAULT_INTERVAL
 
@@ -305,6 +317,8 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
 
     driver: WebDriver; wait: WebDriverWait; timeout_sec: int
     driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, clear_profile)
+
+    num_of_download:int = 0
     try:
         _LOGGER.info("Maximizing browser window")
         driver.maximize_window()
@@ -365,8 +379,11 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                             else:
                                 _LOGGER.warning("Downloading %s because it does not exist", target_path.replace(os.getcwd(), "."))
                                 os.makedirs(os.path.join(target_dir), exist_ok=True)
-                                time.sleep(interval)
+                                time.sleep(interval * 2)
                                 home_element.screenshot(target_path)
+
+                            if not disable_update_time:
+                                disable_update_time_of_file(target_path, dt)
 
                             data_indexes_done.add(data_index)
                             
@@ -374,9 +391,10 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                             break
                     else:
                         sequence_check_count += 1
-                        if sequence_check_count >= 2:
+                        if sequence_check_count >= NUM_OF_RETRIES:
                             _LOGGER.info("Found the end of the home element sequence")
                             break
+                        time.sleep(interval)
                     
                     if home_element:
                         if not is_attached(home_element): # attached
@@ -389,6 +407,7 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
                     
 
     finally:
+        _LOGGER.warning("Finishing album download. The number of downloaded pictures/movies is %s", num_of_download)
         driver.quit()
     
     return 0
@@ -411,7 +430,7 @@ def album_tab(driver: WebDriver, wait: WebDriverWait, \
 def download_album(start_year: int = 2009, start_month: int = 1, \
                    end_year: int = 2023, end_month: int = 12, \
                    interval: int = DEFAULT_INTERVAL, \
-                   download_dir: str = None, browser: str = None, clear_profile=False) -> int:
+                   download_dir: str = None, browser: str = None, clear_profile=False, disable_update_time=False) -> int:
     if interval < DEFAULT_INTERVAL:
         interval = DEFAULT_INTERVAL
 
@@ -421,6 +440,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
     driver: WebDriver; wait: WebDriverWait; timeout_sec: int
     driver, wait, download_dir, timeout_sec = get_driver_and_wait(download_dir, browser, clear_profile)
 
+    num_of_download:int = 0
     try:
         with wellnote(driver, wait, interval, email, password):
 
@@ -504,8 +524,8 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                             # if os.path.exists(target_filepath):
                             if glob.glob(target_filepath_woe + ".*"):
                                 _LOGGER.warning("Skipping    %s because it exists", target_filepath_woe.replace(os.getcwd(), "."))
+                                target_filepath = glob.glob(target_filepath_woe + ".*")[0]
                             else:
-
                                 _LOGGER.debug("Waiting until a clickable vdots button is available")
                                 vdots_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-hCwLRM"]))
                                 _LOGGER.info("Clicking vdots button")
@@ -518,6 +538,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                                     _LOGGER.warning("Downloading %s", target_filepath_woe.replace(os.getcwd(), "."))
                                     _LOGGER.info("Clicking download button")
                                     download_button.click()
+                                    num_of_download += 1
                                     time.sleep(interval)
 
                                 downloaded_filepath: str = download_result.downloaded_filepath
@@ -528,6 +549,10 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                                 os.makedirs(os.path.join(target_dir), exist_ok=True)
                                 shutil.move(downloaded_filepath, target_filepath)
 
+                            if not disable_update_time:
+                                dt: datetime = datetime(year=year_i, month=month_i, day=day_i, hour=12, minute=00, second=00, microsecond=0)
+                                disable_update_time_of_file(target_filepath, dt)
+                            
                             swiper_button_next = None
                             with inspect_mode(driver, timeout_sec) as wait2:
                                 _LOGGER.debug("Waiting until a clickable next button is available")
@@ -539,7 +564,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                             _LOGGER.info("Clicking the swiper_button_next")
                             swiper_button_next.click()
-                            # time.sleep(interval)
+                            time.sleep(interval/4)
 
                             idx += 1
 
@@ -563,7 +588,10 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                     year += 1
                     start_month = 1
+                
+
     finally:
+        _LOGGER.warning("Finishing album download. The number of downloaded pictures/movies is %s", num_of_download)
         driver.quit()
     return 0
 
@@ -603,6 +631,7 @@ def main_cli(*args: list[str]) -> int:
     wellnote_downloader_home_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_home_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
     wellnote_downloader_home_ap.add_argument('--clear-profile', dest="clear_profile", action='store_true', default=False, help="Clear the browser profile to reset session, loaded files, etc.")
+    wellnote_downloader_home_ap.add_argument('--disable-update-time', dest="disable_update_time", action='store_true', default=False, help="Disable to update birth/modify/access time of file.")
     wellnote_downloader_home_ap.add_argument('--loglevel', dest="log_level", metavar="LEVEL", nargs=None, default=None, help=f"Log level either {_acceptable_levels}.")
     wellnote_downloader_home_ap.set_defaults(handler=download_home)
 
@@ -614,6 +643,7 @@ def main_cli(*args: list[str]) -> int:
     wellnote_downloader_album_ap.add_argument("--dir", dest="download_dir", metavar="DIR", nargs=None, default=None, help="Download directry. Default is ./download")
     wellnote_downloader_album_ap.add_argument("--browser", dest="browser", metavar="STR", nargs=None, default=None, help="Browser to automate. either firefox or chrome. default is firefox.")
     wellnote_downloader_album_ap.add_argument('--clear-profile', dest="clear_profile", action='store_true', default=False, help="Clear the browser profile to reset session, loaded files, etc.")
+    wellnote_downloader_album_ap.add_argument('--disable-update-time', dest="disable_update_time", action='store_true', default=False, help="Disable to update birth/modify/access time of file.")
     wellnote_downloader_album_ap.add_argument('--loglevel', dest="log_level", metavar="LEVEL", nargs=None, default=None, help=f"Log level either {_acceptable_levels}.")
     wellnote_downloader_album_ap.set_defaults(handler=download_album)
 

@@ -53,6 +53,9 @@ DEFAULT_INTERVAL: int = 1
 NUM_OF_RETRIES: int = 3
 
 def parse_date_str_int(date_s: str) -> tuple[str, str, str]:
+    """
+    2019年9月6日
+    """
     match: re.Match = re.search("(\d+)\s*年\s*(\d+)\s*月\s*(\d+)\s*日", date_s)
     if match:
         year_i: int = int(match.group(1))
@@ -452,7 +455,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                     _LOGGER.debug("Waiting until a year text is available")
                     # year = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[contains(text(), '年')]"])) # dont work
-                    year_elem: WebElement = wait.until(EC.visibility_of_element_located([By.XPATH, "//div[@class='sc-bOtlzW fgPidp']"]))
+                    year_elem: WebElement = wait.until(EC.visibility_of_element_located([By.CLASS_NAME, "sc-bvFjSx"]))
                     year = int(year_elem.text.replace("年", ""))
 
                     if year == start_year:
@@ -460,8 +463,9 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                     move_previous_year_button = None
                     with inspect_mode(driver, timeout_sec) as wait2:
-                        _LOGGER.debug("Waiting until a clickable next button is available")
-                        move_previous_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-jFkwbb ruuVe']"]))
+                        _LOGGER.debug("Waiting until a clickable previous year button is available")
+                        move_previous_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-emDsmM fWHKrl']"]))
+                        # move_previous_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-emDsmM"]))
                     if not move_previous_year_button:
                         _LOGGER.info("Breaking this year because previous button is not found")
                         start_month = 1
@@ -471,6 +475,7 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                     move_previous_year_button.click()
                     time.sleep(interval)
 
+                _LOGGER.debug("Found year==%s, start_year==%s, end_year=%s", year, start_year, end_year)
                 ## Iterate over years
                 while year <= end_year:
 
@@ -480,14 +485,18 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                     month: int
                     for month in range(start_month, end_month_of_this_year + 1):
 
+                        # <li class="sc-bttaWv fQmbrI">1</li> # selected
+                        # <li class="sc-bttaWv hEsndb" tabindex="0">1</li> # not selected 
+                        # <li class="sc-bttaWv Bhkiq" disabled="">10</li> # disabled
                         _LOGGER.debug("Waiting until a clickable %s-th month button is available", month)
                         month_button: WebElement = wait.until(EC.element_to_be_clickable([By.XPATH, f"//li[text()='{month}']"]))
-                        if "jAQwgG" in month_button.get_attribute("class"):
+                        if "fQmbrI" in month_button.get_attribute("class"):
                             # selected
                             _LOGGER.info("Already at month %s", month)
                         else:
                             # if month_button.is_displayed() and month_button.is_enabled(): # dont work
-                            if "RJZN" in month_button.get_attribute("class"):
+                            if "hEsndb" in month_button.get_attribute("class"):
+                                # note selected
                                 _LOGGER.info("Moving %s-th month", month)
                                 month_button.click()
                                 time.sleep(interval)
@@ -507,8 +516,8 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                         while True:
 
                             _LOGGER.debug("Waiting until a visible date text is available")
-                            date_elem: WebElement = wait.until(EC.visibility_of_element_located([By.CLASS_NAME, "sc-dWbSDx"]))
-                            date_s: str = date_elem.text
+                            date_elem: WebElement = wait.until(EC.visibility_of_element_located([By.CLASS_NAME, "sc-hmvnCu"]))
+                            date_s: str = date_elem.text # 2019年9月5日
                             _LOGGER.info("Found date %s", date_s)
 
                             if date_s != last_date_s:
@@ -527,12 +536,12 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                                 target_filepath = glob.glob(target_filepath_woe + ".*")[0]
                             else:
                                 _LOGGER.debug("Waiting until a clickable vdots button is available")
-                                vdots_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-hCwLRM"]))
+                                vdots_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-bGaVxB"]))
                                 _LOGGER.info("Clicking vdots button")
                                 vdots_button.click()
 
                                 _LOGGER.debug("Waiting until a clickable download button is available")
-                                download_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-hLVXRe"]))
+                                download_button: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-gnnDb"]))
 
                                 with safe_download(driver, wait, download_dir) as download_result:
                                     _LOGGER.warning("Downloading %s", target_filepath_woe.replace(os.getcwd(), "."))
@@ -568,8 +577,9 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
 
                             idx += 1
 
-                        _LOGGER.debug("Waiting until a clickable html body is available")
-                        close_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-edERGn jYcwJ']"]))
+                        _LOGGER.debug("Waiting until a clickable close button is available")
+                        # close_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-eldieg ljoTWs']"]))
+                        close_button: WebElement = wait2.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-eldieg"]))
 
                         _LOGGER.info("Closing the preview window")
                         close_button.click()
@@ -577,7 +587,8 @@ def download_album(start_year: int = 2009, start_month: int = 1, \
                     move_next_year_button = None
                     with inspect_mode(driver, timeout_sec) as wait2:
                         _LOGGER.debug("Waiting until a clickable next year button is available")
-                        move_next_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-jFkwbb lbXnTj']"]))
+                        move_next_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.XPATH, "//*[name()='svg' and @class='sc-emDsmM dRpxwk']"]))
+                        # move_next_year_button: WebElement = wait2.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-emDsmM"]))
                     if not move_next_year_button:
                         _LOGGER.info("Breaking this year because next year button is not found")
                         break

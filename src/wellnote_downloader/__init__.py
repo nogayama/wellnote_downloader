@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.13.0"
+__version__ = "0.13.1"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace

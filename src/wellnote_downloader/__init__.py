@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.13.2"
+__version__ = "0.13.3"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -90,7 +90,7 @@ def get_driver_and_wait(download_dir: str = None, browser: str = None, clear_pro
         download_dir = os.path.join(os.getcwd(), "Downloads")
 
     if not browser:
-        browser = "firefox"
+        browser = "chrome"
 
     driver: WebDriver = None
     if browser == "chrome":

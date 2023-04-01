@@ -10,7 +10,7 @@
 # http://opensource.org/licenses/mit-license.php
 # =================================================================
 
-__version__ = "0.13.1"
+__version__ = "0.13.2"
 
 import argparse
 from argparse import ArgumentParser, Action, Namespace
@@ -329,7 +329,8 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
 
             _LOGGER.info("Deleting your family element")
             # <div class="sc-dkQkyq kcvKs"><div translate="no" class="sc-jivBlf fDaukR">あなたの家族</div></div>
-            your_family_elem = driver.find_element(By.CLASS_NAME, 'sc-dkQkyq')
+            # <div class="sc-fIosxK betDep"><div translate="no" class="sc-gyElHZ eHwBVV">あなたの家族</div></div>
+            your_family_elem = driver.find_element(By.CLASS_NAME, 'sc-fIosxK')
             driver.execute_script("var element = arguments[0]; element.parentNode.removeChild(element); ", your_family_elem)
             time.sleep(interval)
             
@@ -339,8 +340,10 @@ def download_home(start_year: int = 2009, start_month: int = 1, \
 
                 sequence_check_count: int = 0
                 while True:
-                    
-                    home_element_parent: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-dMOJrz"]))
+                    # <section class="sc-dUbtfd sc-hxaKAp bYAYzG jdTirr">
+                    # <div class="sc-jdhwqr hWjUjw" style="box-sizing: border-box; padding-top: 0px; padding-bottom: 19548px; margin-top: 0px;">
+                    home_element_parent: WebElement = wait.until(EC.element_to_be_clickable([By.CLASS_NAME, "sc-jdhwqr"]))
+
                     home_elements: WebElement = home_element_parent.find_elements(By.XPATH, "./div")
                     _LOGGER.debug("Found %s home elements in display.", len(home_elements))
 
